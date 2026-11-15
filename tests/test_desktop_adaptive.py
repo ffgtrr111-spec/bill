@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch, Mock
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT/os.environ.get('BILLING_APP_DIR','app')))
+sys.path.insert(0, str(ROOT/os.environ.get('BILLING_APP_DIR','Billing_App/app')))
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
@@ -33,7 +33,7 @@ class AdaptiveDesktopTests(unittest.TestCase):
 
     def test_geometry_in_fresh_styled_process(self):
         result = subprocess.run([sys.executable,str(ROOT/'tests/desktop_layout_probe.py'),
-                                 str(ROOT/os.environ.get('BILLING_APP_DIR','app'))],capture_output=True,text=True,timeout=45)
+                                 str(ROOT/os.environ.get('BILLING_APP_DIR','Billing_App/app'))],capture_output=True,text=True,timeout=45)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
     def test_print_button_opens_explicit_dialog_and_submits_real_document(self):

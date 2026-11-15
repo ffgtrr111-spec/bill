@@ -7,8 +7,7 @@ automatic admin-defined offers, quantities, customer details, full payment and r
 amount due using the existing calculation: a ₹100 price with 5% GST totals ₹105.
 
 **Admin login** unlocks exchanges, offers, manual discounts, partial payments, credit, inventory, customers,
-balances, expenses, sales history, statistics, backup and update buttons. The recommended copy also has whole-database
-CSV export. **Lock** clears the unfinished bill
+balances, expenses, sales history, statistics, backup, whole-database CSV export and update buttons. **Lock** clears the unfinished bill
 and returns to employee access. Restarting always begins in Employee mode.
 
 In both Employee and Admin billing, typing a phone number shows matching
@@ -23,6 +22,12 @@ The receipt's UPI QR uses the recorded payment amount. For example, a ₹700 bil
 with **Paid now** set to ₹200 generates a ₹200 QR and shows ₹500 outstanding.
 The QR caption shows the same payment amount. A fully credit bill (₹0 paid) has
 no payment QR. Reopening a receipt uses its current total recorded payments.
+
+The QR pays the ICICI POS terminal's UPI ID, `ibkPOS.EP276334@icici`. The ID, payee
+name and bank reference (`tr`) are the `UPI_*` settings near the top of
+`Billing_App/app/receipt.py`, copied from the terminal's own QR. Change them there
+only if the bank issues a new ID. Spaces in the link are written as `%20` (never
+`+`) so payment apps show the name and invoice note correctly.
 
 ## Screen sizes, printing, backup and updates
 
@@ -42,8 +47,8 @@ connection and printer status if a submitted job does not reach paper.
 
 In Admin mode, **Backup** lets you choose a folder for a complete SQLite `.db`
 backup. It includes customers, bills, payments, inventory and all other tables,
-using SQLite's online backup operation while the app is open. Both app copies
-provide this button; copies have unique names and do not overwrite each other.
+using SQLite's online backup operation while the app is open. Backup files have
+unique names and do not overwrite each other.
 
 **Update** checks the checkout's current remote tracking branch. Choose
 **Back up, update and rebuild** to close billing, fast-forward that same branch,
@@ -55,7 +60,7 @@ is retained if building fails, and a successful update keeps
 leave the source checkout updated; retry Update to rebuild, or use the previous
 executable. Build details are in the app folder's `setup.log`.
 
-Run the executable from `app/dist` or `Billing_App/app/dist` inside its complete
+Run the executable from `Billing_App/app/dist` inside its complete
 Git clone so Update can locate it. A detached executable or ZIP copy needs a Git
 clone first. **Existing installations need one initial pull and rebuild to get
 these buttons.** After that, use Update; manually deleting the executable is not
@@ -68,10 +73,6 @@ a database backup before closing and keeps the database in the same user profile
 2. Clone the repository, or download and **extract the complete ZIP** into a folder you can write to. Keep the `tools` folder with the application folders.
 3. Double-click **`setup.bat` at the repository root**. Internet is needed to install packages.
 4. When it reports success, open **`Billing_App\app\dist\ClothShopBilling.exe`**.
-
-The root setup builds the copy with backup/export tools. `Billing_App\setup.bat`
-uses the same setup. To build the alternate root `app` copy, run
-`app\build_windows.bat`; its executable is in `app\dist`.
 
 Setup chooses a compatible interpreter, installs packages into that app's
 `.venv-windows` folder, checks database/desktop/receipt behavior using temporary
@@ -87,8 +88,7 @@ changes. Old generated build files and Python caches do not belong in Git.
 
 The window stays open with a short error. The detailed log is:
 
-- Recommended copy: `Billing_App\app\setup.log`
-- Alternate copy: `app\setup.log`
+- `Billing_App\app\setup.log`
 
 Share that file and the first error, rather than copying thousands of console
 lines. Setup stops on the failing step and never reports a failed build as a
@@ -184,7 +184,7 @@ Date filters use SQLite date indexes. Report totals use integer cents and exact
 Decimal aggregation for collections/expenses; historical bill discounts are
 allocated to products with cent reconciliation. Query snapshots keep report
 cards and chart series consistent during writes. SQLite WAL uses FULL write
-synchronization in both desktop copies. No optional database fields are removed.
+synchronization. No optional database fields are removed.
 
 ## Automatic category and brand offers
 
@@ -297,7 +297,7 @@ separate people with the same name. Choose a month, then select the employee.
 
 ## Purchases, Chart of Accounts and godowns
 
-These screens appear after **Admin** login in both desktop copies. Employee
+These screens appear after **Admin** login. Employee
 billing stays in **Default shop / Retail**. The same SQLite database and Backup
 button include all purchase, account and location records.
 
@@ -480,7 +480,7 @@ Click **Install / setup** in Barcode Labels when printing support is missing.
 Linux command-line setup is also available from the repository root:
 
 ```bash
-sudo python3 app/printer_setup.py --install-citizen
+sudo python3 Billing_App/app/printer_setup.py --install-citizen
 ```
 
 On Arch, the manual printing-tool setup is:
@@ -515,19 +515,19 @@ code was alphanumeric; conflicting item codes are rejected.
 Linux/source, after pulling the existing task branch:
 
 ```bash
-python3 -m pip install -r app/requirements.txt
-python3 app/main.py
+python3 -m pip install -r Billing_App/app/requirements.txt
+python3 Billing_App/app/main.py
 ```
 
 Windows source:
 
 ```powershell
-py -3.13 -m pip install -r app/requirements.txt
-py -3.13 app/main.py
+py -3.13 -m pip install -r Billing_App/app/requirements.txt
+py -3.13 Billing_App/app/main.py
 ```
 
 An existing Windows executable must be rebuilt using **Update & rebuild** or
-`setup.bat`. Both app copies use the same ZPL generation and durable stock code.
+`setup.bat`.
 Windows RAW spooler API behavior is tested with a stub on Linux; native Windows
 execution and physical printer/media output still require checks on those devices.
 The built-in Citizen font determines available glyphs; hex escaping preserves

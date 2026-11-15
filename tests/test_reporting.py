@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / os.environ.get('BILLING_APP_DIR', 'app')))
+sys.path.insert(0, str(ROOT / os.environ.get('BILLING_APP_DIR', 'Billing_App/app')))
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QApplication, QMessageBox, QScrollArea
@@ -358,7 +358,7 @@ class ReportingTests(unittest.TestCase):
         # Run an actual event loop with the production theme in a fresh process.
         result = subprocess.run(
             [sys.executable, str(ROOT / 'tests/report_layout_probe.py'),
-             str(ROOT / os.environ.get('BILLING_APP_DIR', 'app'))],
+             str(ROOT / os.environ.get('BILLING_APP_DIR', 'Billing_App/app'))],
             capture_output=True, text=True, timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

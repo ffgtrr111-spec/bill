@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/os.environ.get('BILLING_APP_DIR','app')))
+sys.path.insert(0,str(ROOT/os.environ.get('BILLING_APP_DIR','Billing_App/app')))
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from PySide6.QtWidgets import QApplication,QDialog,QMessageBox,QComboBox,QSpinBox
 from PySide6.QtPrintSupport import QPrinter

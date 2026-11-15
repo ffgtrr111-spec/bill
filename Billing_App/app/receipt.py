@@ -6,7 +6,7 @@ Professional A4 Tax Invoice for BELLI APPERAL.
 """
 
 from html import escape
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from io import BytesIO
 import tempfile
@@ -61,8 +61,14 @@ SHOP_PHONE = "6360086532"
 # ============================================================
 # Standard UPI payment QR for compatible apps such as PhonePe,
 # Google Pay and Paytm. The recorded payment amount is included in the URI.
-UPI_ID = "9148783935.ibz@icici"
-UPI_PAYEE_NAME = SHOP_NAME
+#
+# These three values are copied from the ICICI POS terminal's own QR
+# (Terminal ID EP276334), which decodes to:
+#   upi://pay?pa=ibkPOS.EP276334@icici&tr=EPYSSQREP276334
+# The bank only accepts payments for the exact UPI ID / reference it issued.
+UPI_ID = "ibkPOS.EP276334@icici"
+UPI_PAYEE_NAME = "BELLI APPAREL SYNDICATE"  # name registered with the bank
+UPI_TRANSACTION_REF = "EPYSSQREP276334"
 
 
 # ============================================================
@@ -253,11 +259,16 @@ def _upi_payment_uri(bill_row, total):
     params = {
         "pa": UPI_ID,
         "pn": UPI_PAYEE_NAME,
+        "tr": UPI_TRANSACTION_REF,
         "am": f"{max(_num(total), 0.0):.2f}",
         "cu": "INR",
         "tn": f"Invoice {bill_no}",
     }
-    return "upi://pay?" + urlencode(params)
+    # Bug fix: urlencode() defaults to quote_plus(), which writes spaces as "+"
+    # and "@" as "%40". UPI apps do not reliably turn "+" back into a space,
+    # so the payer could see "BELLI+APPAREL+SYNDICATE" and "Invoice+12".
+    # Use %20 for spaces and keep "@" as-is in the UPI ID, like bank QR codes.
+    return "upi://pay?" + urlencode(params, quote_via=quote, safe="@")
 
 
 def _make_payment_qr_image(bill_row, total):

@@ -1,5 +1,6 @@
 """Real transactions: purchasing, valuation, accounts, permissions and migrations."""
 import os
+from datetime import date
 from pathlib import Path
 import sqlite3
 import sys
@@ -8,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/os.environ.get('BILLING_APP_DIR','app')))
+sys.path.insert(0,str(ROOT/os.environ.get('BILLING_APP_DIR','Billing_App/app')))
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from database import Database
 from access import AccessSession,RoleDatabase
@@ -44,7 +45,12 @@ class CommerceFixture:
             qty*500,0,0,qty*500,'Cash',bill_date='2026-10-22',initial_payment_amount=paid,godown_id=location,sale_channel=channel)[0]
 
     def report(self,location=None):
-        return self.db.commerce_report('2026-10-01','2026-10-31',location)
+        # Bug fix: save_exchange() stamps the exchange with today's date while
+        # the fixture purchases/sales are pinned to 2026-10-22. A fixed October
+        # range made test_exchange_restores_original_cost_and_shop fail as soon
+        # as the real month changed, so the range must always include today.
+        end=max('2026-10-31',date.today().isoformat())
+        return self.db.commerce_report('2026-10-01',end,location)
 
 
 class CommerceTests(CommerceFixture, unittest.TestCase):

@@ -113,36 +113,26 @@ app/
   stats_tab.py               - Charts and KPIs
   receipt.py                  - Printable / PDF receipt dialog
   assets/icon.ico               - app icon (Windows .exe icon, title bar, taskbar)
-  assets/icon_*.png               - the same icon as plain PNGs
-  generate_icon.py                 - regenerates the icon if you want to change it
-  build_windows.bat                 - one-click .exe build (see below)
   requirements.txt
 ```
 
 ## 9. The app icon
 
 `assets/icon.ico` is used three places: the Windows `.exe` file itself, the
-window's title bar, and the taskbar. If you ever want a different design,
-edit the colors/shapes at the top of `generate_icon.py` and re-run:
-
-```bash
-python generate_icon.py
-```
-
-That regenerates `assets/icon.ico` and the PNG copies from scratch — nothing
-else in the app needs to change.
+window's title bar, and the taskbar. To change the design, replace that one
+file with another `.ico`; nothing else in the app needs to change.
 
 ## 10. Packaging as a standalone .exe (Windows)
 
 This turns the whole app into a single `ClothShopBilling.exe` your staff can
 double-click, with no need to install Python on the shop's computer.
 
-**Easiest way:** double-click `build_windows.bat` inside the `app` folder.
+**Easiest way:** double-click `setup.bat` in the repository root.
 It installs everything needed and builds the exe for you.
 
 The build uses the shared setup helper, a private `.venv-windows` environment,
 and the compatible versions in `tools/requirements-windows.txt`. To prepare and
-check without building, run the repository's `setup.bat --skip-build`.
+check without building, run `setup.bat --skip-build`.
 
 Detailed failures are saved in `setup.log` inside the selected `app` folder.
 

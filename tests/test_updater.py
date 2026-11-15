@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 import json
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/os.environ.get('BILLING_APP_DIR','app')))
+sys.path.insert(0,str(ROOT/os.environ.get('BILLING_APP_DIR','Billing_App/app')))
 import updater
 from updater import UpdateError, check_update, apply_update, start_update, find_python
 

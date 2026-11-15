@@ -30,8 +30,6 @@ from widgets import (
     make_heading,
     confirm_delete_password,
 )
-from receipt import ReceiptDialog
-from paging import Pager
 
 
 class CustomersTab(QWidget):

@@ -3,16 +3,14 @@
 From the repository root, install the chosen desktop copy's requirements, then run:
 
 ```bash
-QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1 BILLING_APP_DIR=app python -m unittest discover -s tests -v
-QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1 BILLING_APP_DIR=Billing_App/app python -m unittest discover -s tests -v
+QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
 ```
 
 Checks use temporary synthetic SQLite databases. The printing flow is exercised
 with PDF output instead of a physical printer. No running services are needed.
 On Linux, Qt's shared libraries must be available even with the offscreen platform.
 
-Windows release validation also requires running `Billing_App\setup.bat` and
-both desktop `build_windows.bat` scripts on Windows. A failed dependency install
+Windows release validation also requires running the root `setup.bat` on Windows. A failed dependency install
 or PyInstaller build must return a nonzero exit code and must not print setup
 success. Run a packaged executable, print a receipt and save a PDF there as well.
 
@@ -54,7 +52,7 @@ QR generation and PDF output without opening the user's shop database.
 
 ## Role permissions
 
-`test_access.py` runs with the same `BILLING_APP_DIR` selector and temporary fixtures.
+`test_access.py` runs with temporary fixtures.
 It checks employee startup, password rejection/cancellation, admin login/logout,
 fixed catalog pricing, GST, full payments, admin discounts/credit, restricted
 management commands, stale callbacks after logout and receipt access. Existing
@@ -68,7 +66,7 @@ month boundaries and leap years, custom and all-time filters, timestamped bills,
 late collections on older bills, outstanding balances, revenue allocation and
 rounding, mean/median/population deviation, CSV contents and error paths, receipt
 navigation, empty/zero-sales charts and the Balances payment button layout.
-Run it for either copy through the existing `BILLING_APP_DIR` selector. No customer
+Run it with the normal test command above. No customer
 production data is used. Reporting screens are also rendered offscreen for visual
 inspection; this complements rather than replaces native Windows validation.
 
@@ -97,7 +95,6 @@ bill allocation, partial return cents, strictly higher purchase values/full
 settlement, concurrent duplicate-return prevention, idempotent save retries,
 transaction rollback, current offer checks, restocking, subsequent exchanges,
 linked receipt/deletion rules, signed reporting and additive schema preservation.
-The same tests run against both desktop copies with `BILLING_APP_DIR` above.
 Offscreen screen/PDF rendering and a 100,000-bill synthetic lookup benchmark
 complement the suite; native Windows and physical printing still need Windows.
 
@@ -109,8 +106,8 @@ concurrent corrections, leap months, future dates, full/half-day counts, unmarke
 days, linked expense/report reconciliation, complete CSV exports, indexed query
 plans, admin-only access and stale callbacks, and the employee/attendance/expense
 GUI flows. The existing expense deletion regression targets the action column
-after the added Employee column. Run the suite against both app copies with the
-commands above; all data is synthetic.
+after the added Employee column. Run the suite with the
+command above; all data is synthetic.
 
 ## Final audit regressions
 
@@ -118,8 +115,8 @@ commands above; all data is synthetic.
 collection limits and reports; per-bill customer balances; invalid cart edits;
 GST for bundle participants with zero allocated discount cents; distinct backup
 files created in the same second; and whole-database CSV consistency during a
-concurrent sale. Backup and whole-database export cases run only for the
-recommended copy that provides those features. The concurrency payment test
+concurrent sale. Backup and whole-database export cases cover
+those features. The concurrency payment test
 instruments the payment read without depending on a specific aggregate name.
 
 ## Adaptive desktop and updater checks
@@ -147,10 +144,9 @@ repeatable migrations, role checks, real purchase-form submission, PDF and backu
 The existing legacy migration, sales, offers, reporting and access suites also
 cover the shared database paths.
 
-Run the new screen geometry probe for either copy:
+Run the new screen geometry probe:
 
 ```bash
-QT_QPA_PLATFORM=offscreen python tests/commerce_layout_probe.py app
 QT_QPA_PLATFORM=offscreen python tests/commerce_layout_probe.py Billing_App/app
 ```
 
@@ -176,7 +172,6 @@ are skipped; production requires python-barcode and existing qrcode/PySide6.
 Additional production-styled geometry probes:
 
 ```bash
-QT_QPA_PLATFORM=offscreen python tests/label_layout_probe.py app
 QT_QPA_PLATFORM=offscreen python tests/label_layout_probe.py Billing_App/app
 ```
 
@@ -197,7 +192,7 @@ page counts, stock on successful versus failed submission, A4 receipt rendering,
 refreshable printer dialogs and Windows native selection without CUPS commands.
 It uses mocked command responses and temporary synthetic PDFs/databases, sending
 no real printer jobs. PDF inspection requires `tests/requirements-labels.txt`.
-Run it for both app copies using `BILLING_APP_DIR` as described above. Physical
+Run it as described above. Physical
 printing and native Windows executable verification remain device/OS checks.
 
 

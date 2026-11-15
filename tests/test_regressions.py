@@ -1,4 +1,4 @@
-"""Run against either desktop copy with BILLING_APP_DIR (see tests/README.md)."""
+"""Regression tests for the desktop app (see tests/README.md)."""
 import csv
 import importlib
 import os
@@ -14,7 +14,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_DIR = ROOT / os.environ.get('BILLING_APP_DIR', 'app')
+APP_DIR = ROOT / os.environ.get('BILLING_APP_DIR', 'Billing_App/app')
 sys.path.insert(0, str(APP_DIR))
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -168,16 +168,23 @@ class RegressionTests(unittest.TestCase):
                 uri = urlsplit(payload)
                 self.assertEqual((uri.scheme, uri.netloc), ('upi', 'pay'))
                 self.assertEqual(parse_qs(uri.query), {
-                    'pa': ['9148783935.ibz@icici'],
-                    'pn': [receipt.SHOP_NAME],
+                    'pa': ['ibkPOS.EP276334@icici'],
+                    'pn': ['BELLI APPAREL SYNDICATE'],
+                    'tr': ['EPYSSQREP276334'],
                     'am': [f'{amount:.2f}'],
                     'cu': ['INR'],
                     'tn': [f'Invoice {bill_no}'],
                 })
+                # Spaces must be %20 (never "+") and the UPI ID keeps its "@",
+                # exactly like the bank's own POS QR.
+                self.assertNotIn('+', payload)
+                self.assertIn('pa=ibkPOS.EP276334@icici', payload)
+                self.assertIn('pn=BELLI%20APPAREL%20SYNDICATE', payload)
+                self.assertIn('tn=Invoice%20INV-TEST%20%26%201', payload)
         bill, lines = self.db.get_bill(self.sale()[0])
         dialog = ReceiptDialog(bill, lines)
         self.addCleanup(dialog.close)
-        self.assertIn('9148783935.ibz@icici', dialog.text_edit.toPlainText())
+        self.assertIn('ibkPOS.EP276334@icici', dialog.text_edit.toPlainText())
 
     def test_admin_discounted_receipt_qr_uses_paid_now(self):
         import receipt
@@ -211,7 +218,7 @@ class RegressionTests(unittest.TestCase):
                     payload = b''.join(part.data for part in codes[0].data_list).decode('utf-8')
                     params = parse_qs(urlsplit(payload).query)
                     self.assertEqual(params['am'], [f'{paid_now:.2f}'])
-                    self.assertEqual(params['pa'], ['9148783935.ibz@icici'])
+                    self.assertEqual(params['pa'], ['ibkPOS.EP276334@icici'])
                     self.assertIn(f'<div class="qr-amount">₹{paid_now:.2f}</div>', html)
                 else:
                     self.assertEqual(codes, [])
