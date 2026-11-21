@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QDialog, QDialogButtonBox, QInputDialog
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
+from paging import Pager
 
 from widgets import rupees, make_heading
 
@@ -137,8 +138,8 @@ class InventoryTab(QWidget):
 
         # --- categories column
         cat_box = QGroupBox("Categories")
-        cat_box.setMinimumWidth(240)
-        cat_box.setMaximumWidth(280)
+        cat_box.setMinimumWidth(200)
+        cat_box.setMaximumWidth(240)
         cat_v = QVBoxLayout(cat_box)
         cat_v.setSpacing(10)
         self.category_list = QListWidget()
@@ -164,8 +165,8 @@ class InventoryTab(QWidget):
 
         # --- subtypes column
         sub_box = QGroupBox("Brands / Styles")
-        sub_box.setMinimumWidth(240)
-        sub_box.setMaximumWidth(280)
+        sub_box.setMinimumWidth(200)
+        sub_box.setMaximumWidth(240)
         sub_v = QVBoxLayout(sub_box)
         sub_v.setSpacing(10)
         self.subtype_list = QListWidget()
@@ -195,14 +196,25 @@ class InventoryTab(QWidget):
         search_row = QHBoxLayout()
         self.item_search_input = QLineEdit()
         self.item_search_input.setPlaceholderText("Search items...")
-        self.item_search_input.textChanged.connect(self._refresh_items)
+        self.search_timer = QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(180)
+        self.search_timer.timeout.connect(self._refresh_items)
+        self.item_search_input.textChanged.connect(lambda: self.search_timer.start())
+        self.item_search_input.setClearButtonEnabled(True)
+        self.item_search_input.setAccessibleName("Search inventory items")
         search_row.addWidget(self.item_search_input)
         items_v.addLayout(search_row)
 
         self.items_table = QTableWidget(0, 7)
         self.items_table.setHorizontalHeaderLabels(["Name", "Brand/Style", "Barcode", "Rate", "Stock", "", ""])
         items_header = self.items_table.horizontalHeader()
-        items_header.setSectionResizeMode(0, QHeaderView.Stretch)
+        # Keep product names readable; smaller windows can scroll horizontally.
+        items_header.setSectionResizeMode(0, QHeaderView.Interactive)
+        self.items_table.setColumnWidth(0, 180)
+        self.items_table.setColumnWidth(3, 90)
+        self.items_table.setColumnWidth(4, 60)
+        self.items_table.setWordWrap(False)
         items_header.setSectionResizeMode(5, QHeaderView.Fixed)
         items_header.setSectionResizeMode(6, QHeaderView.Fixed)
         self.items_table.setColumnWidth(5, 80)
@@ -211,6 +223,9 @@ class InventoryTab(QWidget):
         self.items_table.setAlternatingRowColors(True)
         self.items_table.setEditTriggers(QTableWidget.NoEditTriggers)
         items_v.addWidget(self.items_table)
+        self.pager = Pager()
+        self.pager.changed.connect(self._refresh_items)
+        items_v.addWidget(self.pager)
 
         item_btn_row = QHBoxLayout()
         add_item_btn = QPushButton("+ Add Item")
@@ -233,7 +248,9 @@ class InventoryTab(QWidget):
                 self.category_list.setCurrentItem(item)
         self.category_list.blockSignals(False)
         if self.category_list.count() and self.category_list.currentRow() < 0:
+            self.category_list.blockSignals(True)
             self.category_list.setCurrentRow(0)
+            self.category_list.blockSignals(False)
         self._on_category_selected()
 
     def _on_category_selected(self, *_):
@@ -255,11 +272,19 @@ class InventoryTab(QWidget):
         self.subtype_list.blockSignals(False)
 
     def _refresh_items(self):
+        self.search_timer.stop()
+        # A queued search must not run privileged queries after admin logout.
+        if hasattr(self.db, "session") and not self.db.session.is_admin:
+            return
         self.items_table.setRowCount(0)
         if not self.selected_category_id:
+            self.pager.set_total(0)
             return
         search = self.item_search_input.text().strip() or None
-        items = self.db.get_items(category_id=self.selected_category_id, search=search)
+        self.pager.filter((self.selected_category_id, search))
+        total, items = self.db.inventory_page(self.selected_category_id, search,
+                                               self.pager.size, self.pager.offset)
+        self.pager.set_total(total)
         self.items_table.setRowCount(len(items))
         for row_idx, it in enumerate(items):
             self.items_table.setItem(row_idx, 0, QTableWidgetItem(it["name"]))

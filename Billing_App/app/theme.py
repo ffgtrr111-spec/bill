@@ -15,7 +15,7 @@ COLORS = {
     "accent": "#c77b30",        # warm accent for totals / highlights
     "danger": "#c0392b",
     "text": "#212529",
-    "muted": "#6c757d",
+    "muted": "#59636c",
     "border": "#dcdfe3",
 }
 
@@ -136,6 +136,7 @@ QComboBox QAbstractItemView, QListView, QAbstractItemView {{
 }}
 
 QPushButton {{
+    min-height: 20px;
     background: {COLORS['primary']};
     color: white;
     border: none;
@@ -196,6 +197,27 @@ QPushButton[compact="true"] {{
     padding: 3px 10px;
     font-weight: 600;
     border-radius: 5px;
+}}
+
+QPushButton:focus {{
+    border: 2px solid {COLORS['accent']};
+}}
+
+QPushButton[role="secondary"]:pressed {{
+    background: #d3e8dc;
+}}
+
+QPushButton:disabled, QPushButton[role="secondary"]:disabled,
+QPushButton[role="danger"]:disabled, QPushButton[role="link"]:disabled {{
+    background: #e4e8e5;
+    color: #68756d;
+    border: 1px solid #cbd3cd;
+}}
+
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled,
+QDoubleSpinBox:disabled, QDateEdit:disabled {{
+    background: #edf0ee;
+    color: #59636c;
 }}
 
 QTableWidget {{

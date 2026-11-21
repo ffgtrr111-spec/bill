@@ -275,7 +275,7 @@ class OfferQueries:
             bill_rate = next(iter(rates)) if len(rates)==1 else 0.0
             total = sum_money([net,gst])
             if (values['bill_date'] != date.today().isoformat()
-                    or values['payment_mode'] not in ('Cash','Card','UPI','Other')
+                    or values['payment_mode'] not in ('Cash','Card','UPI','Other','Cash + UPI')
                     or money(values['subtotal'])!=gross or money(values['discount_amount'])!=discount
                     or not math.isclose(float(values['discount_percent']),discount/gross*100 if gross else 0,abs_tol=1e-8)
                     or money(values['taxable_amount'])!=net or float(values['gst_rate'])!=bill_rate

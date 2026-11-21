@@ -184,11 +184,15 @@ class ExpensesTab(QWidget):
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.Interactive)
+        self.expense_table.setColumnWidth(4, 220)
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(7, QHeaderView.ResizeToContents)
 
+        self.expense_table.setMinimumHeight(220)
+        self.expense_table.setWordWrap(False)
+        self.expense_table.verticalHeader().setDefaultSectionSize(40)
         self.expense_table.setEditTriggers(QTableWidget.NoEditTriggers)
         outer.addWidget(self.expense_table, 1)
         self.pager = Pager()
@@ -314,6 +318,7 @@ class ExpensesTab(QWidget):
 
             delete_btn = QPushButton("Delete")
             delete_btn.setProperty("role", "danger")
+            delete_btn.setProperty("compact", "true")
             expense_id = expense["id"]
             delete_btn.clicked.connect(
                 lambda _, eid=expense_id: self._delete_expense(eid)

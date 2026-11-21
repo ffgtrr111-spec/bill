@@ -12,6 +12,8 @@ from theme import COLORS
 
 
 class ExchangeCart(BillingTab):
+    supports_split_and_credit = False
+
     def __init__(self, db, source_id, selections, quote, on_saved):
         self.source_id = source_id
         self.selections = dict(selections)

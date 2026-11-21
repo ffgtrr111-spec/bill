@@ -37,7 +37,7 @@ DB_FILENAME = "cloth_shop.db"
 def _default_db_path() -> str:
     """Store the DB next to the app, in a user-writable location."""
     base = os.path.join(os.path.expanduser("~"), ".cloth_shop_billing")
-    os.makedirs(base, exist_ok=True)
+    os.makedirs(base, mode=0o700, exist_ok=True)
     return os.path.join(base, DB_FILENAME)
 
 
@@ -181,6 +181,7 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
         # date(...) indexes preserve existing timestamp/date semantics.
         with self._conn() as conn:
             for statement in (
+                "CREATE INDEX IF NOT EXISTS idx_items_category_name ON items(active,category_id,name,id)",
                 "CREATE INDEX IF NOT EXISTS idx_bills_day ON bills(date(bill_date))",
                 "CREATE INDEX IF NOT EXISTS idx_payments_day ON payments(date(payment_date))",
                 "CREATE INDEX IF NOT EXISTS idx_expenses_day ON expenses(date(expense_date))",
@@ -980,9 +981,8 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
             conn.execute("DELETE FROM subtypes WHERE id=?", (subtype_id,))
 
     # --------------------------------------------------------------- items
-    def get_items(
-        self, category_id=None, subtype_id=None, active_only=True, search=None
-    ):
+    @staticmethod
+    def _items_query(category_id=None, subtype_id=None, active_only=True, search=None):
         q = """
             SELECT items.*, categories.name AS category_name,
                    subtypes.name AS subtype_name
@@ -1003,9 +1003,23 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
         if search:
             q += " AND items.name LIKE ?"
             params.append(f"%{search}%")
-        q += " ORDER BY items.name"
+        return q, params
+
+    def get_items(self, category_id=None, subtype_id=None, active_only=True, search=None):
+        q, params = self._items_query(category_id, subtype_id, active_only, search)
         with self._conn() as conn:
-            return conn.execute(q, params).fetchall()
+            return conn.execute(q + " ORDER BY items.name,items.id", params).fetchall()
+
+    def inventory_page(self, category_id, search=None, limit=200, offset=0):
+        q, params = self._items_query(category_id=category_id, search=search)
+        limit = max(1, min(int(limit), 200))
+        with self._conn() as conn:
+            conn.execute("BEGIN")
+            total = conn.execute("SELECT COUNT(*) FROM (" + q + ")", params).fetchone()[0]
+            offset = min(max(0, int(offset)), max(0, (total - 1) // limit) * limit)
+            rows = conn.execute(q + " ORDER BY items.name,items.id LIMIT ? OFFSET ?",
+                                params + [limit, offset]).fetchall()
+            return total, rows
 
     def get_item_by_barcode(self, barcode: str):
         with self._conn() as conn:
@@ -1309,6 +1323,8 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
         customer_details=None,
         godown_id=1,
         sale_channel="Retail",
+        *,
+        cash_amount=None,
     ):
         """
         Save a bill and optional customer details as one atomic transaction.
@@ -1370,6 +1386,19 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
             raise ValueError(
                 f"Initial payment cannot exceed bill total of Rs. {total:.2f}."
             )
+
+        payments = [(payment_mode, initial_payment_amount)] if initial_payment_amount > 0 else []
+        if payment_mode == 'Cash + UPI':
+            if cash_amount is None:
+                raise ValueError('Enter the cash amount for the split payment.')
+            cash_amount = money(cash_amount)
+            if initial_payment_amount != money(total) or not 0 < cash_amount < initial_payment_amount:
+                raise ValueError('A split payment must cover the bill and include both cash and UPI.')
+            payments = [('Cash', cash_amount), ('UPI', money(initial_payment_amount - cash_amount))]
+        elif cash_amount is not None:
+            raise ValueError('A cash portion is only valid for Cash + UPI.')
+        elif payment_mode == 'Credit' and initial_payment_amount != 0:
+            raise ValueError('A credit bill cannot record an initial payment.')
 
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -1501,10 +1530,8 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
                     ),
                 )
 
-            # Save the first payment in the same transaction as the bill.
-            # A zero payment is valid for a fully-credit sale, so simply
-            # don't create a row in that case.
-            if initial_payment_amount > 0:
+            # Save the initial payments in the same transaction as the bill.
+            for tender, amount in payments:
                 conn.execute(
                     """
                     INSERT INTO payments(
@@ -1521,8 +1548,8 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
                         bill_id,
                         customer_id,
                         bill_date,
-                        initial_payment_amount,
-                        payment_mode,
+                        amount,
+                        tender,
                         payment_notes,
                     ),
                 )
@@ -1548,6 +1575,12 @@ class Database(LabelQueries, CommerceQueries, ReportingQueries, OfferQueries, Ex
             ).fetchall()
             if bill is not None:
                 bill = dict(bill)
+                if bill["payment_mode"] == "Cash + UPI":
+                    upi = conn.execute(
+                        "SELECT amount FROM payments WHERE bill_id=? AND payment_mode='UPI' ORDER BY id LIMIT 1",
+                        (bill_id,),
+                    ).fetchone()
+                    bill["split_upi_amount"] = money(upi["amount"]) if upi else 0
                 bill["total"] = money(bill["total"])
                 bill["paid_amount"] = money(bill["paid_amount"])
                 bill["balance"] = max(money(bill["total"] - bill["paid_amount"]), 0)

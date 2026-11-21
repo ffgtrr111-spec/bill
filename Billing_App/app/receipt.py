@@ -294,6 +294,12 @@ def _make_payment_qr_image(bill_row, total):
     return image
 
 
+def _qr_amount(bill_row):
+    if _value(bill_row, "payment_mode", "") == "Cash + UPI":
+        return _num(_value(bill_row, "split_upi_amount", 0))
+    return _paid_amount(bill_row)
+
+
 def build_receipt_html(bill_row, bill_items):
     """Build the complete A4 tax invoice as HTML."""
 
@@ -338,14 +344,13 @@ def build_receipt_html(bill_row, bill_items):
 
     paid_amount = _paid_amount(bill_row)
     balance_amount = _balance_amount(bill_row)
-    # Use the recorded payment (Paid now on a new bill), not the invoice total.
-    # A fully credit sale has no payment to collect through a QR yet.
+    qr_amount = _qr_amount(bill_row)
     payment_qr_html = (
         f'<img src="qr://invoice-payment" width="88" height="88">'
         f'<div class="qr-title">SCAN TO PAY</div>'
-        f'<div class="qr-amount">{_money(paid_amount)}</div>'
+        f'<div class="qr-amount">{_money(qr_amount)}</div>'
         f'<div class="qr-upi">{escape(UPI_ID)}</div>'
-        if paid_amount > 0 else '<div class="qr-title">No payment recorded</div>'
+        if qr_amount > 0 else '<div class="qr-title">No payment recorded</div>'
     )
 
     # Intra-state Karnataka sale: 5% GST -> 2.5% CGST + 2.5% SGST.
@@ -1219,9 +1224,9 @@ class ReceiptDialog(QDialog):
 
         # Register the bill-specific UPI QR as a document resource so it
         # prints correctly in both the A4 printer output and saved PDF.
-        paid_amount = _paid_amount(bill_row)
-        if paid_amount > 0 and html is None:
-            qr_image = _make_payment_qr_image(bill_row, paid_amount)
+        qr_amount = _qr_amount(bill_row)
+        if qr_amount > 0 and html is None:
+            qr_image = _make_payment_qr_image(bill_row, qr_amount)
             if not qr_image.isNull():
                 document.addResource(
                     QTextDocument.ImageResource,

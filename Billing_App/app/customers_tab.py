@@ -113,6 +113,7 @@ class CustomersTab(QWidget):
             QHeaderView.ResizeToContents,
         )
 
+        self.customer_table.setMinimumHeight(180)
         self.customer_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
         self.customer_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -226,6 +227,8 @@ class CustomersTab(QWidget):
         # ========================================================
 
         history_box = QGroupBox("Purchase History")
+        # Keep the details and actions legible; the surrounding page can scroll.
+        history_box.setMinimumWidth(570)
 
         history_v = QVBoxLayout(history_box)
 
@@ -234,6 +237,8 @@ class CustomersTab(QWidget):
             6,
         )
 
+        self.history_table.setMinimumHeight(190)
+        self.history_table.setWordWrap(False)
         self.history_table.verticalHeader().setDefaultSectionSize(40)
 
         self.history_table.setHorizontalHeaderLabels(
@@ -247,10 +252,9 @@ class CustomersTab(QWidget):
             ]
         )
 
-        self.history_table.horizontalHeader().setSectionResizeMode(
-            1,
-            QHeaderView.Stretch,
-        )
+        for column, width in ((0, 140), (1, 110), (2, 70), (3, 100)):
+            self.history_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.Interactive)
+            self.history_table.setColumnWidth(column, width)
 
         self.history_table.horizontalHeader().setSectionResizeMode(
             4,
@@ -327,6 +331,7 @@ class CustomersTab(QWidget):
             3,
         )
 
+        self.wishlist_table.setMinimumHeight(150)
         self.wishlist_table.verticalHeader().setDefaultSectionSize(40)
 
         self.wishlist_table.setHorizontalHeaderLabels(

@@ -2,6 +2,12 @@
 import hashlib
 import hmac
 import inspect
+import json
+import os
+from pathlib import Path
+import secrets
+import tempfile
+import time
 from datetime import date
 
 from money import money, line_amount, sum_money
@@ -13,15 +19,61 @@ from offers import offer_taxes
 _ADMIN_DIGEST = "2a28a012069a3b1157afe78c07537a6416f628b3987d2ae2d57f4c7d9c93764c"
 
 
-def verify_admin_password(password):
-    digest = hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), b"billing-desktop-admin-v1", 200000
-    ).hex()
-    return hmac.compare_digest(digest, _ADMIN_DIGEST)
+def credential_path():
+    return Path.home() / ".cloth_shop_billing" / "admin-credentials.json"
+
+
+def verify_admin_password(password, path=None):
+    path = Path(path) if path is not None else credential_path()
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        salt = bytes.fromhex(record["salt"])
+        expected = bytes.fromhex(record["digest"])
+        iterations = record["iterations"]
+        if (type(iterations) is not int or not 200000 <= iterations <= 1000000
+                or len(salt) != 32 or len(expected) != 32):
+            return False
+    except FileNotFoundError:
+        salt, expected, iterations = b"billing-desktop-admin-v1", bytes.fromhex(_ADMIN_DIGEST), 200000
+    except (OSError, ValueError, KeyError, TypeError):
+        # A damaged credential file must never re-enable the shared password.
+        return False
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(digest, expected)
+
+
+def change_admin_password(current, new, path=None):
+    path = Path(path) if path is not None else credential_path()
+    if not verify_admin_password(current, path):
+        raise ValueError("The current password is incorrect.")
+    if not 12 <= len(new) <= 1024:
+        raise ValueError("Use a password with 12 to 1024 characters.")
+    if current == new:
+        raise ValueError("Choose a different password.")
+    salt = secrets.token_bytes(32)
+    record = dict(salt=salt.hex(), iterations=600000,
+                  digest=hashlib.pbkdf2_hmac("sha256", new.encode("utf-8"), salt, 600000).hex())
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=".admin-", delete=False) as stream:
+            temporary = stream.name
+            json.dump(record, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            os.unlink(temporary)
 
 
 class AccessSession:
-    def __init__(self):
+    def __init__(self, password_path=None):
+        self.password_path = password_path
+        self._failures = 0
+        self._retry_at = 0
         self._admin = False
         self.receipt_ids = set()
 
@@ -29,12 +81,29 @@ class AccessSession:
     def is_admin(self):
         return self._admin
 
+    @property
+    def retry_after(self):
+        return max(0, int(self._retry_at - time.monotonic() + 0.999))
+
     def login(self, password):
-        if not verify_admin_password(password):
+        if self.retry_after:
             return False
+        if not verify_admin_password(password, self.password_path):
+            self._failures += 1
+            if self._failures >= 5:
+                self._retry_at = time.monotonic() + 30
+                self._failures = 0
+            return False
+        self._failures = 0
+        self._retry_at = 0
         self._admin = True
         self.receipt_ids.clear()
         return True
+
+    def change_password(self, current, new):
+        if not self.is_admin:
+            raise PermissionError("Admin access is required.")
+        change_admin_password(current, new, self.password_path)
 
     def logout(self):
         self._admin = False

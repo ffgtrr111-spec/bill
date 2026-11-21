@@ -17,6 +17,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QComboBox,
+    QInputDialog,
+    QDialog,
+    QDialogButtonBox,
     QSpinBox,
     QDoubleSpinBox,
     QPushButton,
@@ -31,11 +34,11 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QStandardItem, QStandardItemModel
+from PySide6.QtCore import Qt, QDate, QSignalBlocker
+from PySide6.QtGui import QPixmap, QStandardItem, QStandardItemModel
 
 from widgets import rupees, EditableSearchCombo, divider, make_heading
-from receipt import ReceiptDialog
+from receipt import ReceiptDialog, _make_payment_qr_image
 from money import money, line_amount, tax_amount, sum_money
 from access import AccessSession, RoleDatabase
 from offers import offer_taxes
@@ -44,6 +47,8 @@ NO_SUBTYPE = -1  # sentinel stored as itemData for "no brand/style selected"
 
 
 class BillingTab(QWidget):
+    supports_split_and_credit = True
+
     def __init__(self, db, on_bill_saved=None, session=None):
         super().__init__()
         self.session = db.session if isinstance(db, RoleDatabase) else (session or AccessSession())
@@ -381,14 +386,15 @@ class BillingTab(QWidget):
         date_row.addWidget(QLabel("Bill date:"))
         self.bill_date_input = QDateEdit()
         self.bill_date_input.setCalendarPopup(True)
-        self.bill_date_input.setDate(QDate.currentDate())
-        self.bill_date_input.setMaximumDate(QDate.currentDate())
+        self._date_follows_today = True
+        self._sync_bill_date()
+        self.bill_date_input.dateChanged.connect(self._bill_date_changed)
         self.bill_date_input.setDisplayFormat("dd/MM/yyyy")
         date_row.addWidget(self.bill_date_input)
-        today_btn = QPushButton("Today")
+        today_btn = self.today_btn = QPushButton("Today")
         today_btn.setProperty("role", "secondary")
         today_btn.setToolTip("Set bill date to today")
-        today_btn.clicked.connect(lambda: self.bill_date_input.setDate(QDate.currentDate()))
+        today_btn.clicked.connect(self._reset_bill_date)
         date_row.addWidget(today_btn)
         date_row.addStretch()
         payment_layout.addLayout(date_row)
@@ -401,11 +407,25 @@ class BillingTab(QWidget):
         btn_row.addStretch()
         complete_btn = self.complete_btn = QPushButton("Complete Bill  ✓")
         complete_btn.setMinimumWidth(140)
-        complete_btn.clicked.connect(self._complete_bill)
+        complete_btn.clicked.connect(self._ask_payment_and_complete)
         btn_row.addWidget(complete_btn)
         v.addLayout(btn_row)
 
         return box
+
+    def _bill_date_changed(self, chosen):
+        self._date_follows_today = chosen == QDate.currentDate()
+
+    def _reset_bill_date(self):
+        self._date_follows_today = True
+        self._sync_bill_date()
+
+    def _sync_bill_date(self):
+        today = QDate.currentDate()
+        with QSignalBlocker(self.bill_date_input):
+            self.bill_date_input.setMaximumDate(today)
+            if self._date_follows_today or not self.session.is_admin:
+                self.bill_date_input.setDate(today)
 
     # ------------------------------------------------------ data refreshers
     def _refresh_categories(self):
@@ -428,7 +448,10 @@ class BillingTab(QWidget):
         completer.setCompletionRole(Qt.UserRole)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
         completer.activated[str].connect(self._select_customer_phone)
+        previous = self.phone_input.completer()
         self.phone_input.setCompleter(completer)
+        if previous is not None:
+            previous.deleteLater()
 
     def _select_customer_phone(self, phone):
         self.phone_input.setText(phone)
@@ -888,18 +911,87 @@ class BillingTab(QWidget):
         self._last_total = total
 
     # ---------------------------------------------------------- completion
-    def _complete_bill(self):
+    def _ask_payment_and_complete(self):
+        # Preserve the usual empty-cart message and avoid a needless prompt.
+        if not self.cart:
+            self._complete_bill()
+            return
+        modes = [self.payment_mode_combo.itemText(i) for i in range(self.payment_mode_combo.count())]
+        if self.supports_split_and_credit:
+            modes.append("Cash + UPI")
+            if self.session.is_admin:
+                modes.append("Credit")
+        mode, accepted = QInputDialog.getItem(
+            self, "Payment type", "How is this bill being paid?", modes,
+            self.payment_mode_combo.currentIndex(), False,
+        )
+        if not accepted:
+            return
+        if mode == "Credit":
+            self._complete_bill(payment_mode=mode)
+        elif mode == "Cash + UPI":
+            total = self._grand_total()
+            if total < 0.02:
+                QMessageBox.warning(self, "Cannot split payment", "The bill must be at least Rs. 0.02 to split.")
+                return
+            cash, accepted = QInputDialog.getDouble(
+                self, "Cash + UPI", f"Bill total: {rupees(total)}\nCash received (Rs.):",
+                0.01, 0.01, money(total - 0.01), 2,
+            )
+            if accepted:
+                self._complete_bill(payment_mode=mode, cash_amount=cash)
+        else:
+            self.payment_mode_combo.setCurrentText(mode)
+            self._complete_bill()
+
+    def _confirm_split_upi(self, cash_amount, upi_amount):
+        image = _make_payment_qr_image({"bill_no": "Checkout"}, upi_amount)
+        if image.isNull():
+            QMessageBox.warning(self, "UPI QR unavailable", "Could not generate the payment QR.")
+            return False
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Collect UPI payment")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(f"Cash received: {rupees(cash_amount)}\nScan to pay: {rupees(upi_amount)}"))
+        qr = QLabel()
+        qr.setPixmap(QPixmap.fromImage(image).scaled(240, 240, Qt.KeepAspectRatio))
+        qr.setAlignment(Qt.AlignCenter)
+        layout.addWidget(qr)
+        layout.addWidget(QLabel("Check the payment on your terminal before saving."))
+        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        received = buttons.addButton("UPI received — Save bill", QDialogButtonBox.AcceptRole)
+        received.setAutoDefault(False)
+        cancel = buttons.button(QDialogButtonBox.Cancel)
+        cancel.setDefault(True)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        cancel.setFocus()
+        try:
+            return dialog.exec() == QDialog.Accepted
+        finally:
+            dialog.deleteLater()
+
+    def _complete_bill(self, *, payment_mode=None, cash_amount=None):
         if not self.cart:
             QMessageBox.warning(
                 self, "Empty bill", "Add at least one item before completing the bill."
             )
             return
 
+        self._sync_bill_date()
+        bill_date = self.bill_date_input.date().toString("yyyy-MM-dd")
+        total = self._grand_total()
+        payment_mode = payment_mode or self.payment_mode_combo.currentText()
+        paid_now = self.payment_amount_input.value()
+        if payment_mode == "Credit":
+            paid_now = 0.0
+        elif payment_mode == "Cash + UPI":
+            paid_now = total
+
         try:
-            self.db.validate_employee_cart(
-                self.cart, self.payment_amount_input.value(),
-                self.bill_date_input.date().toString("yyyy-MM-dd"),
-            )
+            self.db.validate_employee_cart(self.cart, paid_now, bill_date)
         except (PermissionError, ValueError) as exc:
             QMessageBox.warning(self, "Admin required", str(exc))
             return
@@ -925,11 +1017,7 @@ class BillingTab(QWidget):
         discount_amount = self._total_discount()
         taxable_amount = self._taxable_amount()
         gst_amount = self._gst_amount()
-        total = self._grand_total()
         percent = (discount_amount / subtotal * 100.0) if subtotal else 0.0
-        payment_mode = self.payment_mode_combo.currentText()
-        bill_date = self.bill_date_input.date().toString("yyyy-MM-dd")
-        paid_now = self.payment_amount_input.value()
 
         if paid_now > total + 0.01:
             QMessageBox.warning(self, "Invalid payment", "Amount paid cannot exceed the bill total.")
@@ -963,6 +1051,13 @@ class BillingTab(QWidget):
         rates = {round(float(row.get("gst_rate", 5.0)), 4) for row in self.cart}
         bill_gst_rate = next(iter(rates)) if len(rates) == 1 else 0.0
 
+        if cash_amount is not None:
+            if not self._confirm_split_upi(cash_amount, money(total - cash_amount)):
+                return
+            # A checkout can remain open across midnight while the customer pays.
+            self._sync_bill_date()
+            bill_date = self.bill_date_input.date().toString("yyyy-MM-dd")
+
         try:
             bill_id, bill_no = self.db.save_bill(
                 customer_id,
@@ -981,9 +1076,13 @@ class BillingTab(QWidget):
                 customer_details=customer_details,
                 godown_id=(self.sale_godown.currentData() or 1) if self.session.is_admin else 1,
                 sale_channel=self.sale_channel.currentText() if self.session.is_admin else 'Retail',
+                **({'cash_amount': cash_amount} if cash_amount is not None else {}),
             )
         except Exception as exc:
-            QMessageBox.critical(self, "Could not save bill", str(exc))
+            message = str(exc)
+            if cash_amount is not None:
+                message += "\n\nThe bill was not saved. Check the terminal and do not collect the same payment again."
+            QMessageBox.critical(self, "Could not save bill", message)
             return
 
         # Invalidate the cart before any fallible work after the commit.
@@ -998,7 +1097,8 @@ class BillingTab(QWidget):
             actions.append(("save the customer request", lambda: self.db.add_wishlist(self.db.get_bill(bill_id)[0]['customer_id'], wishlist_note)))
         if self.on_bill_saved:
             actions.append(("refresh the screens", self.on_bill_saved))
-        actions.append(("refresh customer suggestions", self._refresh_phone_completer))
+        if customer_details and phone:
+            actions.append(("refresh customer suggestions", self._refresh_phone_completer))
         for description, action in actions:
             try:
                 action()
@@ -1008,7 +1108,10 @@ class BillingTab(QWidget):
         try:
             bill_row, saved_bill_items = self.db.get_bill(bill_id)
             dialog = ReceiptDialog(bill_row, saved_bill_items, self)
-            dialog.exec()
+            try:
+                dialog.exec()
+            finally:
+                dialog.deleteLater()
         except Exception as exc:
             failures.append(f"Could not open the receipt: {exc}")
         if failures:

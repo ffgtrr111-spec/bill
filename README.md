@@ -14,14 +14,44 @@ In both Employee and Admin billing, typing a phone number shows matching
 `phone — customer name` suggestions. Selecting one fills the existing customer
 details and uses their stored phone number for the bill.
 
-The admin password configured for this release also authorizes deletion confirmations.
-The local application access gate does not replace Windows account/file permissions
-for protecting the SQLite database or preventing edits to the program itself.
+<!-- coderabbit-ai-generated:v1 -->
 
-The receipt's UPI QR uses the recorded payment amount. For example, a ₹700 bill
-with **Paid now** set to ₹200 generates a ₹200 QR and shows ₹500 outstanding.
-The QR caption shows the same payment amount. A fully credit bill (₹0 paid) has
-no payment QR. Reopening a receipt uses its current total recorded payments.
+<!-- coderabbit-ai-generated-section:v1:a0fa612c113d466bb19c23a308951683882e64014bc75f4dd24e23f325c75868 -->
+
+The admin password also authorizes deletion confirmations. After admin login, use
+**Password** to replace the shared release password with a private password of at
+least 12 characters. Enter the current password and repeat the new one. Existing
+installations retain their current login until it is changed. Five failed login
+attempts pause further attempts for 30 seconds in the running app.
+
+The salted password verifier is saved atomically in
+`~/.cloth_shop_billing/admin-credentials.json` for the current OS user (including
+Windows). Keep this file with that user profile when moving an installation;
+a database backup alone does not include it. An unreadable or damaged credential
+file rejects login instead of using the release password. The local application
+access gate does not replace OS account/file permissions for protecting the
+SQLite database or preventing edits to the program itself.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:5dbdb4ef8f5329f7e704625efc5d2aa1d50ab54dfe5da6887a6734491ea76fd6 -->
+
+**Complete Bill** asks for a payment type. Choose **Cash + UPI** when the customer
+pays part in cash. On a ₹700 bill with ₹200 in cash, the checkout QR requests
+₹500. Verify the UPI payment on the terminal, then confirm to save both payments
+together. The split bill's receipt QR also shows ₹500.
+
+Admins can select **Credit** to save a bill with nothing paid, or set **Paid now**
+before choosing a single payment method to leave a balance. An unpaid bill has no
+payment QR. For bills with a single payment method, the receipt QR still shows the
+recorded paid amount. Employees must collect the full amount.
+
+The bill date follows the local day unless an admin chooses a different date.
+Select **Today** to return to the current day without restarting the app.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 The QR pays the ICICI POS terminal's UPI ID, `ibkPOS.EP276334@icici`. The ID, payee
 name and bank reference (`tr`) are the `UPI_*` settings near the top of

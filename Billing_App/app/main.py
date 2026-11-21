@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QComboBox,
     QMessageBox,
+    QDialog, QDialogButtonBox, QFormLayout,
 )
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import Qt
@@ -50,6 +51,41 @@ def resource_path(relative_path):
 
 
 APP_ICON_PATH = resource_path(os.path.join("assets", "icon.ico"))
+
+
+class PasswordDialog(QDialog):
+    def __init__(self, session, parent=None):
+        super().__init__(parent)
+        self.session = session
+        self.setWindowTitle("Change admin password")
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.current = QLineEdit()
+        self.new = QLineEdit()
+        self.confirm = QLineEdit()
+        for field in (self.current, self.new, self.confirm):
+            field.setEchoMode(QLineEdit.Password)
+            field.setMaxLength(1024)
+        self.new.setPlaceholderText("At least 12 characters")
+        form.addRow("Current password", self.current)
+        form.addRow("New password", self.new)
+        form.addRow("Repeat new password", self.confirm)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _save(self):
+        if self.new.text() != self.confirm.text():
+            QMessageBox.warning(self, "Check password", "The new passwords do not match.")
+            return
+        try:
+            self.session.change_password(self.current.text(), self.new.text())
+        except (ValueError, OSError, PermissionError) as exc:
+            QMessageBox.warning(self, "Could not change password", str(exc))
+            return
+        self.accept()
 
 
 class MainWindow(QMainWindow):
@@ -84,10 +120,15 @@ class MainWindow(QMainWindow):
         self.logout_button.clicked.connect(self._logout_admin)
         self.backup_button = QPushButton("Backup")
         self.backup_button.clicked.connect(lambda: backup_now(self, self.db))
+        self.password_button = QPushButton("Password")
+        self.password_button.setToolTip("Replace the shared admin password with a private password for this installation")
+        self.password_button.clicked.connect(lambda: PasswordDialog(self.session, self).exec() if self.session.is_admin else None)
         self.update_button = QPushButton("Update")
         self.update_button.clicked.connect(self._update_app)
-        for button in (self.admin_button, self.backup_button, self.update_button, self.logout_button):
+        for button in (self.admin_button, self.backup_button, self.update_button, self.password_button, self.logout_button):
             button.setProperty("compact", "true")
+            button.setProperty("role", "secondary")
+            button.setCursor(Qt.PointingHandCursor)
             access_bar.addWidget(button)
         self.tabs.setCornerWidget(controls, Qt.TopRightCorner)
         self.section_picker = QComboBox()
@@ -168,6 +209,7 @@ class MainWindow(QMainWindow):
         self.admin_button.setVisible(not admin)
         self.logout_button.setVisible(admin)
         self.backup_button.setVisible(admin)
+        self.password_button.setVisible(admin)
         self.update_button.setVisible(admin)
         self.setWindowTitle("Cloth Shop Billing System — " + ("Admin" if admin else "Employee"))
 
@@ -187,7 +229,9 @@ class MainWindow(QMainWindow):
         if not accepted:
             return
         if not self.session.login(password):
-            QMessageBox.warning(self, "Incorrect password", "Admin access was not unlocked.")
+            message = (f"Too many attempts. Try again in {self.session.retry_after} seconds."
+                       if self.session.retry_after else "Admin access was not unlocked.")
+            QMessageBox.warning(self, "Incorrect password", message)
             return
         self._build_dashboard()
 
